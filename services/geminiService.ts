@@ -1,13 +1,12 @@
 import { GoogleGenAI, Chat } from "@google/genai";
 import { DESTINATIONS, HOTELS, CARS } from '../constants';
 
-const apiKey = process.env.API_KEY;
+// Use optional chaining for safety. 
+// In a correct Vite build, import.meta.env is defined, but this prevents white-screen crashes if misconfigured.
+const apiKey = import.meta.env?.VITE_API_KEY;
 
-let ai: GoogleGenAI | null = null;
-
-if (apiKey) {
-  ai = new GoogleGenAI({ apiKey });
-}
+// Fail gracefully if key is missing (prevents crash, allows UI to load)
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 const SYSTEM_INSTRUCTION = `
 You are "Bright Road Assistant", a knowledgeable and friendly AI guide for Oman tourism. 
@@ -28,12 +27,16 @@ If they ask general questions about Oman (culture, visa, weather, other location
 Be concise, helpful, and polite. Use emojis sparingly but effectively to keep the tone light and vacation-oriented.
 `;
 
-export const createChatSession = (): Chat | null => {
+export const createChatSession = (): Chat => {
   if (!ai) {
-    console.error("API Key not found");
-    return null;
+    // If AI is null, checking apiKey again gives a clearer error for debugging
+    if (!apiKey) {
+      console.error("Gemini API Key is missing. Ensure VITE_API_KEY is set in Vercel Environment Variables.");
+      throw new Error("API Key is missing. The chat feature is currently unavailable.");
+    }
+    throw new Error("AI client failed to initialize.");
   }
-
+  
   return ai.chats.create({
     model: 'gemini-2.5-flash',
     config: {

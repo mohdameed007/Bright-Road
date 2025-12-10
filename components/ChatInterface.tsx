@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, MapPin } from 'lucide-react';
+import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { createChatSession } from '../services/geminiService';
 import { Message } from '../types';
 import { Chat } from '@google/genai';
@@ -19,8 +19,17 @@ const ChatInterface: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initialize chat session once on mount
-    chatSessionRef.current = createChatSession();
+    // Initialize chat session once on mount with error handling
+    try {
+      chatSessionRef.current = createChatSession();
+    } catch (error) {
+      console.error("Failed to initialize chat session:", error);
+      setMessages(prev => [...prev, {
+        id: 'error-init',
+        role: 'model',
+        text: "⚠️ **System Notice:** The AI service is currently unavailable because the API Key is missing or invalid. Please configure the `VITE_API_KEY` in your Vercel environment settings to enable the chat."
+      }]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -29,7 +38,18 @@ const ChatInterface: React.FC = () => {
   }, [messages, isTyping]);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || !chatSessionRef.current) return;
+    if (!inputValue.trim()) return;
+
+    // Prevent sending if chat session is not initialized
+    if (!chatSessionRef.current) {
+        setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'model',
+            text: "I cannot reply right now because the connection to the AI service was not established."
+        }]);
+        setInputValue('');
+        return;
+    }
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -61,6 +81,10 @@ const ChatInterface: React.FC = () => {
                   sourcesText += `- [${chunk.web.title}](${chunk.web.uri})\n`;
                   hasSources = true;
               }
+              if (chunk.maps?.uri && chunk.maps?.title) {
+                  sourcesText += `- [${chunk.maps.title}](${chunk.maps.uri})\n`;
+                  hasSources = true;
+              }
           });
           if (hasSources) {
              botMsg.text += sourcesText;
@@ -73,7 +97,7 @@ const ChatInterface: React.FC = () => {
       setMessages(prev => [...prev, {
         id: Date.now().toString(),
         role: 'model',
-        text: "I apologize, but I encountered an error. Please try asking again."
+        text: "I apologize, but I encountered an error communicating with the server. Please try asking again."
       }]);
     } finally {
       setIsTyping(false);
@@ -122,14 +146,19 @@ const ChatInterface: React.FC = () => {
                   ? 'bg-red-600 text-white rounded-tr-none' 
                   : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
               }`}>
-                <ReactMarkdown 
-                    className="prose prose-sm max-w-none prose-p:mb-2 last:prose-p:mb-0 prose-a:text-blue-500 hover:prose-a:underline prose-ul:list-disc prose-ul:ml-4"
-                    components={{
-                        a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline decoration-emerald-300 decoration-2 underline-offset-2" />
-                    }}
-                >
-                    {msg.text}
-                </ReactMarkdown>
+                <div className={
+                    msg.role === 'user'
+                    ? "prose-sm max-w-none"
+                    : "prose prose-sm max-w-none prose-p:mb-2 last:prose-p:mb-0 prose-a:text-blue-500 hover:prose-a:underline prose-ul:list-disc prose-ul:ml-4"
+                }>
+                    <ReactMarkdown 
+                        components={{
+                            a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-bold underline decoration-emerald-300 decoration-2 underline-offset-2" />
+                        }}
+                    >
+                        {msg.text}
+                    </ReactMarkdown>
+                </div>
               </div>
             </div>
           </div>
